@@ -1,14 +1,16 @@
 Puppet::Type.type(:logical_volume).provide :lvm do
     desc "Manages LVM logical volumes"
 
-    commands :lvcreate  => 'lvcreate',
-             :lvremove  => 'lvremove',
-             :lvextend  => 'lvextend',
-             :lvs       => 'lvs',
-             :resize2fs => 'resize2fs',
-             :umount    => 'umount',
-             :blkid     => 'blkid',
-             :dmsetup   => 'dmsetup'
+    commands :lvcreate      => 'lvcreate',
+             :lvremove      => 'lvremove',
+             :lvextend      => 'lvextend',
+             :lvresize      => 'lvresize',
+             :lvs           => 'lvs',
+             :resize2fs     => 'resize2fs',
+             :umount        => 'umount',
+             :mount        => 'mount',
+             :blkid         => 'blkid',
+             :dmsetup       => 'dmsetup'
 
     def create
         args = ['-n', @resource[:name]]
@@ -90,7 +92,24 @@ Puppet::Type.type(:logical_volume).provide :lvm do
         end
 
         if not resizeable
-            fail( "Decreasing the size requires manual intervention (#{new_size} < #{current_size})" )
+	    ## Nothing is not resizeable. Just need to be careful :)
+            ## Check if new size fits the extend blocks
+            if new_size_bytes * lvm_size_units[new_size_unit] % vg_extent_size != 0
+                fail( "Cannot extend to size #{new_size} because VG extent size is #{vg_extent_size} KB" )
+            end
+
+            if blkid(path)=~/TYPE=\"(ext[34])\"/
+              mounted=`mount`.split("\n").grep(/^#{path} /).map { |x| x.split(" ")[2]  }
+              if not mounted.empty?
+                umount( path)  || fail( "Cannot unmount #path - maybe there are files in use" )
+              end
+              lvresize( '-r', '-L', new_size, path) || fail( "Cannot resize to #{new_size} because lvresize failed." )
+            elsif blkid(path)=~/TYPE=\"(swap)\"/
+              lvresize( '-L', new_size, path) || fail( "Cannot resize to #{new_size} because lvresize failed." )
+            else
+              fail("Not sure how to reduce the size of that type of filesystem. Aborting.")
+            end
+            
         else
             ## Check if new size fits the extend blocks
             if new_size_bytes * lvm_size_units[new_size_unit] % vg_extent_size != 0
