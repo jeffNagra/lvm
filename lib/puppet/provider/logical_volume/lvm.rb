@@ -105,7 +105,7 @@ Puppet::Type.type(:logical_volume).provide :lvm do
               end
               lvresize( '-r', '-L', new_size, path) || fail( "Cannot resize to #{new_size} because lvresize failed." )
             elsif blkid(path)=~/TYPE=\"(swap)\"/
-              lvresize( '-L', new_size, path) || fail( "Cannot resize to #{new_size} because lvresize failed." )
+              lvresize( '-f', '-L', new_size, path) || fail( "Cannot resize to #{new_size} because lvresize failed." )
             else
               fail("Not sure how to reduce the size of that type of filesystem. Aborting.")
             end
